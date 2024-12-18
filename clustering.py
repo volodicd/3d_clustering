@@ -49,31 +49,22 @@ def kmeans(points: np.ndarray,
     """
     ######################################################
     # Write your own code here
-    # Safety check
     n_points = len(points)
-    if n_points == 0 or n_clusters <= 0:
-        return np.array([]), np.array([])
-
     best_inertia = float('inf')
     best_centers = None
     best_labels = None
 
-    # We'll repeat the entire K-Means process n_iterations times
     for _ in range(n_iterations):
-        # 1. Initialize centroids
         if centers_in is not None:
             centers = centers_in.copy().astype(np.float32)
         else:
             random_indices = np.random.choice(n_points, n_clusters, replace=False)
             centers = points[random_indices].astype(np.float32)  # (k,3)
 
-        # 2. K-Means main loop (Assignment & Update)
         labels = np.zeros(n_points, dtype=int)
         for _iter in range(max_singlerun_iterations):
-            # -------- Assignment Step --------
-            # Compute distance from each point to each center -> shape (n_points, n_clusters)
+            # Computing distance from each point to each center -> shape (n_points, n_clusters)
             dist_matrix = distance.cdist(points, centers, metric='euclidean')
-            # Label each point with the cluster index that gives the minimal distance
             new_labels = np.argmin(dist_matrix, axis=1)
 
             # If labels don't change, we are converged
@@ -81,30 +72,23 @@ def kmeans(points: np.ndarray,
                 break
             labels = new_labels
 
-            # -------- Update Step --------
             for k in range(n_clusters):
                 cluster_points = points[labels == k]
                 if len(cluster_points) > 0:
                     centers[k] = np.mean(cluster_points, axis=0)
                 else:
-                    # If no points assigned, reinitialize or leave the center as is
-                    # For simplicity: pick a random point as a new centroid
                     random_idx = np.random.randint(n_points)
                     centers[k] = points[random_idx]
 
-        # 3. Compute inertia (sum of squared distances to centroids)
+        # Compute inertia
         dist_matrix = distance.cdist(points, centers, metric='euclidean')
-        # Each point's distance to its assigned cluster center
         assigned_distances = dist_matrix[np.arange(n_points), labels]
         inertia = np.sum(assigned_distances ** 2)
 
-        # 4. Keep track of the best run
         if inertia < best_inertia:
             best_inertia = inertia
             best_centers = centers.copy()
             best_labels = labels.copy()
-
-    # Return the best solution found
 
     return best_centers, best_labels
 
@@ -143,18 +127,13 @@ def iterative_kmeans(points: np.ndarray,
     best_centers = None
     best_labels = None
 
-    # We'll try every k from 2 up to max_n_clusters
     for k in range(2, max_n_clusters + 1):
-        # Run kmeans
         centers_k, labels_k = kmeans(points,
                                      n_clusters=k,
                                      n_iterations=n_iterations,
                                      max_singlerun_iterations=max_singlerun_iterations)
 
-        # Compute silhouette score
         sil_k = silhouette_score(points, centers_k, labels_k)
-
-        # Keep track of best silhouette so far
         if sil_k > best_sil_score:
             best_sil_score = sil_k
             best_centers = centers_k
@@ -186,58 +165,45 @@ def gmeans(points: np.ndarray,
     ######################################################
     # Write your own code here
     n_points = len(points)
-    if n_points == 0:
-        return np.array([]), np.array([])
-
-    # Start with a single cluster center: the mean of all points
     centers = np.mean(points, axis=0, keepdims=True)  # shape=(1,3)
 
     while True:
-        # ----------- Global K-Means assignment with 'centers' -----------
-        # Initialize labels
         global_labels = np.zeros(n_points, dtype=int)
-        # We'll do a K-Means loop to refine 'centers' for the entire dataset
         for _ in range(max_singlerun_iterations):
-            # 1. Assignment step: for each point, find nearest center
-            dist_matrix = distance.cdist(points, centers, 'euclidean')  # shape=(n_points, k)
+            # searching nearest center for every point
+            dist_matrix = distance.cdist(points, centers, 'euclidean')
             new_labels = np.argmin(dist_matrix, axis=1)
 
             if np.all(new_labels == global_labels):
                 break
             global_labels = new_labels
 
-            # 2. Update step: recalc each center
+            # recalculating centers
             for c_idx in range(len(centers)):
                 cluster_points = points[global_labels == c_idx]
                 if len(cluster_points) > 0:
                     centers[c_idx] = np.mean(cluster_points, axis=0)
 
-        # Keep track if any cluster was split in this iteration
         cluster_split = False
         new_centers_list = []
 
-        # --------------- Check splits for each cluster ---------------
         for c_idx in range(len(centers)):
             cluster_points = points[global_labels == c_idx]
             if len(cluster_points) <= 1:
-                # single or no points => cannot split
                 new_centers_list.append(centers[c_idx])
                 continue
 
-            # 1. Compute largest eigenvalue & eigenvector from covariance
-            cov_mat = np.cov(cluster_points.T)  # (3,3)
+            cov_mat = np.cov(cluster_points.T)
             eigvals, eigvecs = np.linalg.eig(cov_mat)
             max_eig_idx = np.argmax(eigvals)
             lamda = eigvals[max_eig_idx]
             s = eigvecs[:, max_eig_idx]
-            s /= np.linalg.norm(s)  # normalize
+            s /= np.linalg.norm(s)
 
             c_i = centers[c_idx]
-            # 2. Create two child centers
             c_i1 = c_i + s * (2 * lamda / np.pi)
             c_i2 = c_i - s * (2 * lamda / np.pi)
 
-            # 3. Locally run 2-means on 'cluster_points' starting from c_i1 and c_i2
             child_centers = np.stack([c_i1, c_i2], axis=0).astype(np.float32)
             child_labels = np.zeros(len(cluster_points), dtype=int)
 
@@ -255,23 +221,21 @@ def gmeans(points: np.ndarray,
 
             c_i1, c_i2 = child_centers[0], child_centers[1]
 
-            # 4. Project cluster_points onto v = c_i1 - c_i2
             v = c_i1 - c_i2
             v_len_sq = np.dot(v, v)
             if v_len_sq < 1e-12:
-                # degenerate direction => treat as no split
+                # degenerating direction => treating as no split
                 new_centers_list.append(centers[c_idx])
                 continue
             x_projected = np.dot(cluster_points - c_i2, v) / v_len_sq
 
-            # 5. Anderson-Darling test
             ad_stat, critical_values, _ = anderson(x_projected, dist='norm')
-            # If ad_stat <= critical[-1]*tolerance => data is "Gaussian"
+            # checking if data is gauus
             if ad_stat <= critical_values[-1] * tolerance:
-                # keep single cluster
+                # keeping cluster
                 new_centers_list.append(centers[c_idx])
             else:
-                # not Gaussian => split
+                # spliting, cause not gaussigan
                 new_centers_list.append(c_i1)
                 new_centers_list.append(c_i2)
                 cluster_split = True
@@ -279,13 +243,12 @@ def gmeans(points: np.ndarray,
         new_centers = np.stack(new_centers_list, axis=0)
 
         if not cluster_split:
-            # no more splits => final solution
+            # exit if not more splits left
             centers = new_centers
             break
         else:
             centers = new_centers
 
-    # ---------- Final assignment with final centers ----------
     final_labels = np.zeros(n_points, dtype=int)
     for _ in range(max_singlerun_iterations):
         dist_matrix = distance.cdist(points, centers, 'euclidean')
@@ -329,29 +292,20 @@ def dbscan(points: np.ndarray,
     labels = np.full(n_points, -2, dtype=int)  # -2 = unvisited
     cluster_id = 0
 
-    # Optionally precompute distance matrix for speed on small datasets
-    # dist_matrix = distance.cdist(points, points, 'euclidean')
-
     for i in range(n_points):
-        # If visited (either assigned to cluster or noise), skip
+        # If visited (either assigned to cluster or noise) - skip
         if labels[i] != -2:
             continue
 
-        # region query for point i
-        # If no precomputed dist_matrix, compute on the fly:
         dist_i = np.linalg.norm(points - points[i], axis=1)
         neighbors = np.where(dist_i <= eps)[0]
 
-        # Check core condition
         if len(neighbors) < min_samples:
-            labels[i] = -1  # noise
+            labels[i] = -1
         else:
-            # New cluster
             cluster_id += 1
-            # Grow this cluster using BFS / queue approach
             labels[i] = cluster_id
 
-            # We'll expand the cluster starting from neighbors
             queue = list(neighbors)
             idx_ptr = 0
             while idx_ptr < len(queue):
@@ -361,18 +315,17 @@ def dbscan(points: np.ndarray,
                 # If neighbor is unvisited
                 if labels[neighbor_idx] == -2:
                     labels[neighbor_idx] = cluster_id
-                    # region query for neighbor_idx
                     dist_neighbor = np.linalg.norm(points - points[neighbor_idx], axis=1)
                     neighbors_of_neighbor = np.where(dist_neighbor <= eps)[0]
 
-                    # If neighbor is also a core point, add its neighbors to the queue
+                    # If neighbor is also a core point, addint its neighbors to the queue
                     if len(neighbors_of_neighbor) >= min_samples:
                         queue.extend(neighbors_of_neighbor)
 
                 elif labels[neighbor_idx] == -1:
-                    # Was noise, now becomes border
+                    # noise to border escalation
                     labels[neighbor_idx] = cluster_id
 
-    # Replace leftover -2 (never visited) with -1 if any remain
+    # Replacing leftovers -2 (never visited) with -1 if any remain
     labels[labels == -2] = -1
     return labels
