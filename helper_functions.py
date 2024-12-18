@@ -37,61 +37,55 @@ def silhouette_score(points: np.ndarray,
     """
     ######################################################
     # Write your own code here
-    n_points = len (points)
+    n_points = len(points)
     if n_points <= 1:
+        print("Zero-points problem")
         return 0.0
 
-    # Number of clusters
-    n_clusters = len (centers)
+    n_clusters = len(centers)
     if n_clusters <= 1:
         # If there's only one cluster, silhouette doesn't make sense
         return 0.0
 
-    # Precompute distances between every pair of points (optional optimization)
-    # dist_all = distance.cdist(points, points, 'euclidean')
-    # Or we can compute on the fly. Let’s do on-the-fly to keep it simpler.
 
-    s_values = np.zeros (n_points, dtype=np.float32)
+    s_values = np.zeros(n_points, dtype=np.float32)
 
     # Group points by cluster
     cluster_indices = []
-    for k in range (n_clusters):
-        idx = np.where (labels == k)[0]  # indices of points in cluster k
-        cluster_indices.append (idx)
+    for k in range(n_clusters):
+        idx = np.where(labels == k)[0]
+        cluster_indices.append(idx)
 
-    for i in range (n_points):
+    for i in range(n_points):
         cluster_id = labels[i]
         # Points in the same cluster as point i
         same_cluster_idx = cluster_indices[cluster_id]
-        # a_i: mean distance to other points in the same cluster
         # If cluster size == 1, silhouette is 0 by definition
         if len (same_cluster_idx) == 1:
             s_values[i] = 0.0
             continue
 
         # Compute average distance to other points in the same cluster
-        # We exclude the point i itself
         same_cluster_points = points[same_cluster_idx]
-        a_i = np.mean (np.linalg.norm (same_cluster_points - points[i], axis=1))
-        # But this includes distance to itself (which is 0). It's okay or we could exclude it for small difference.
-        # If we want EXACT formula:
+        a_i = np.mean(np.linalg.norm(same_cluster_points - points[i], axis=1))
+        # if fails here comment string above and uncomment below one (or in oter way) (down there is formula which exclude the point
+        # we are taking, it could fail when our point is center one.
         # a_i = np.sum(dist_all[i, same_cluster_idx]) / (len(same_cluster_idx) - 1)
 
-        # b_i: find the minimum average distance to points in any other cluster
-        b_i = float ('inf')
-        for k in range (n_clusters):
+        # searching the minimum average distance to points in any other cluster
+        b_i = float('inf')
+        for k in range(n_clusters):
             if k == cluster_id:
                 continue
             other_idx = cluster_indices[k]
-            if len (other_idx) == 0:
+            if len(other_idx) == 0:
                 continue
             other_points = points[other_idx]
-            avg_dist_other = np.mean (np.linalg.norm (other_points - points[i], axis=1))
+            avg_dist_other = np.mean(np.linalg.norm(other_points - points[i], axis=1))
             if avg_dist_other < b_i:
                 b_i = avg_dist_other
 
-        # silhouette for point i
-        s_i = (b_i - a_i) / max (a_i, b_i)
+        s_i = (b_i - a_i) / max(a_i, b_i)
         s_values[i] = s_i
     score = np.mean(s_values)
 
@@ -202,4 +196,3 @@ def text_3d(text, pos, direction=None, degree=0.0, font='RobotoMono-Medium.ttf',
     trans[0:3, 3] = np.asarray(pos)
     pcd.transform(trans)
     return pcd
-

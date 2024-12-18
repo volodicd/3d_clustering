@@ -24,17 +24,17 @@ from helper_functions import *
 if __name__ == '__main__':
 
     # Selects which single-plane file to use
-    pointcloud_idx = 0
+    pointcloud_idx = 6
 
     # Pick which clustering algorithm to apply:
-    use_kmeans = True
+    use_kmeans = False
     use_iterative_kmeans = False
     use_gmeans = False
-    use_dbscan = False
+    use_dbscan = True
 
     # RANSAC parameters:
     confidence = 0.85
-    inlier_threshold = 0.015  # Might need to be adapted, depending on how you implement fit_plane
+    inlier_threshold = 0.05  # Might need to be adapted, depending on how you implement fit_plane
 
     # Downsampling parameters:
     use_voxel_downsampling = True
@@ -79,6 +79,9 @@ if __name__ == '__main__':
                                           confidence=confidence,
                                           inlier_threshold=inlier_threshold)
     inlier_indices = np.nonzero(best_inliers)[0]
+    print(f"Detected plane: {plane_model}")
+    print(f"Number of inliers: {len(inlier_indices)}")
+    print(f"Silhouette score: {silhouette_score(points=np.asarray(pcd_sampled.points), centers=np.array([plane_model]), labels=np.array(best_inliers))}")
 
     # Alternatively use the built-in function of Open3D
     # plane_model, inlier_indices = pcd_sampled.segment_plane(distance_threshold=inlier_threshold,
@@ -99,6 +102,9 @@ if __name__ == '__main__':
 
     # Convert to NumPy array
     points = np.asarray(scene_pcd.points, dtype=np.float32)
+    if len (scene_pcd.points) == 0:
+        print ("Error: No points left for clustering after plane detection.")
+        exit ()
 
     # k-Means
     if use_kmeans:

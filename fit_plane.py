@@ -9,7 +9,6 @@ MatrNr: FILL IN
 
 from typing import Tuple
 
-import copy
 
 import numpy as np
 import open3d as o3d
@@ -39,58 +38,58 @@ def fit_plane(pcd: o3d.geometry.PointCloud,
     :rtype: tuple (np.ndarray[a,b,c,d], np.ndarray)
     """
     ######################################################
-    # Write your own code here
+    # Convert point cloud to NumPy array
     points = np.asarray(pcd.points)
     n_points = points.shape[0]
+
     best_plane = np.array([0., 0., 1., 0.])
-    best_inliers = np.full(points.shape[0], False)
+    best_inliers = np.zeros(n_points, dtype=bool)
+    max_inliers_count = 0
+
     outlier_ratio = 0.3
-    counter = 0
     p_inliers = 1.0 - outlier_ratio
-    p_triplet = p_inliers ** 3
-    if p_triplet < 1e-9:
-        n_iter = 2000
-    else:
-        n_iter = math.log (1 - confidence) / math.log (1 - p_triplet)
-        n_iter = int (np.clip (n_iter, 500, 5000))
+    p_triplet = max(p_inliers ** 3, 1e-9)  # Prevent log(0)
+    n_iter = int(np.clip (math.log (1 - confidence) / math.log (1 - p_triplet), 500, 5000))
 
     for _ in range(n_iter):
-        idx = np.random.choice(points.shape[0], 3, replace = False)
-        p1, p2, p3 = points[idx[0]], points[idx[1]], points[idx[2]]
-        normal = np.cross(p2-p1, p3-p1)
+        idx = np.random.choice(n_points, 3, replace=False)
+        p1, p2, p3 = points[idx]
+
+        normal = np.cross(p2 - p1, p3 - p1)
         norm_len = np.linalg.norm(normal)
         if norm_len < 1e-9:
             continue
         normal /= norm_len
-        a,b,c = normal
+
+        a, b, c = normal
         d = -np.dot(normal, p1)
-        plane_eq = np.array([a, b, c, d])
-        distances = np.abs(a * points[:, 0] + b * points[:, 1] + c * points[:, 2] + d)
+        distances = np.abs(np.dot(points, normal) + d)
+
+
         inliers = distances < inlier_threshold
-        if np.sum(inliers) > counter:
-            counter = np.sum(inliers)
+        inliers_count = np.sum(inliers)
+
+        if inliers_count > max_inliers_count:
+            max_inliers_count = inliers_count
             best_inliers = inliers.copy()
-            best_plane = plane_eq.copy()
-    if counter > 3:  # Need at least 3 points
-        inlier_points = points[best_inliers]  # shape = (#inliers, 3)
-        A = np.hstack ([inlier_points, np.ones ((inlier_points.shape[0], 1))])  # (n,4)
-        b = np.zeros ((inlier_points.shape[0],))  # (n,)
+            best_plane = np.array([a, b, c, d])
 
-        # Solve A * [a,b,c,d] = 0 in least-squares sense
-        plane_params, residuals, rank, s = np.linalg.lstsq (A, b, rcond=None)
-        a, b, c, d = plane_params
 
-        # If c<0 => flip sign so plane normal has positive z component
-        if c < 0:
-            plane_params = -plane_params
-            a, b, c, d = plane_params
+    # This section refines the plane parameters, which have been obtained by the RANSEAC. It founds the most accurate plane.
+    if max_inliers_count >= 3:
+        inlier_points = points[best_inliers]
+        A = np.hstack([inlier_points, np.ones((inlier_points.shape[0], 1))])
+        b = np.zeros(inlier_points.shape[0])  # Zero vector for Ax + d = 0
+        refined_plane, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
 
-        best_plane = plane_params
-        # Recompute inliers after refinement
-        distances = np.abs (a * points[:, 0] + b * points[:, 1] + c * points[:, 2] + d)
-        best_inliers = distances < inlier_threshold
-        counter = np.sum (best_inliers)
+        normal = refined_plane[:3]
+        norm_len = np.linalg.norm(normal)
+        if norm_len > 1e-9:
+            refined_plane[:3] /= norm_len
+            if refined_plane[2] < 0:
+                refined_plane = -refined_plane
+            best_plane = refined_plane
+            distances = np.abs(np.dot(points, best_plane[:3]) + best_plane[3])
+            best_inliers = distances < inlier_threshold
 
-        # Return final plane & bool inlier mask
-    best_plane = best_plane.astype (np.float64)
     return best_plane, best_inliers

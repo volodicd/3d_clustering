@@ -50,59 +50,59 @@ def kmeans(points: np.ndarray,
     ######################################################
     # Write your own code here
     # Safety check
-    n_points = len (points)
+    n_points = len(points)
     if n_points == 0 or n_clusters <= 0:
-        return np.array ([]), np.array ([])
+        return np.array([]), np.array([])
 
-    best_inertia = float ('inf')
+    best_inertia = float('inf')
     best_centers = None
     best_labels = None
 
     # We'll repeat the entire K-Means process n_iterations times
-    for _ in range (n_iterations):
+    for _ in range(n_iterations):
         # 1. Initialize centroids
         if centers_in is not None:
-            centers = centers_in.copy ().astype (np.float32)
+            centers = centers_in.copy().astype(np.float32)
         else:
-            random_indices = np.random.choice (n_points, n_clusters, replace=False)
-            centers = points[random_indices].astype (np.float32)  # (k,3)
+            random_indices = np.random.choice(n_points, n_clusters, replace=False)
+            centers = points[random_indices].astype(np.float32)  # (k,3)
 
         # 2. K-Means main loop (Assignment & Update)
-        labels = np.zeros (n_points, dtype=int)
-        for _iter in range (max_singlerun_iterations):
+        labels = np.zeros(n_points, dtype=int)
+        for _iter in range(max_singlerun_iterations):
             # -------- Assignment Step --------
             # Compute distance from each point to each center -> shape (n_points, n_clusters)
-            dist_matrix = distance.cdist (points, centers, metric='euclidean')
+            dist_matrix = distance.cdist(points, centers, metric='euclidean')
             # Label each point with the cluster index that gives the minimal distance
-            new_labels = np.argmin (dist_matrix, axis=1)
+            new_labels = np.argmin(dist_matrix, axis=1)
 
             # If labels don't change, we are converged
-            if np.all (new_labels == labels):
+            if np.all(new_labels == labels):
                 break
             labels = new_labels
 
             # -------- Update Step --------
-            for k in range (n_clusters):
+            for k in range(n_clusters):
                 cluster_points = points[labels == k]
-                if len (cluster_points) > 0:
-                    centers[k] = np.mean (cluster_points, axis=0)
+                if len(cluster_points) > 0:
+                    centers[k] = np.mean(cluster_points, axis=0)
                 else:
                     # If no points assigned, reinitialize or leave the center as is
                     # For simplicity: pick a random point as a new centroid
-                    random_idx = np.random.randint (n_points)
+                    random_idx = np.random.randint(n_points)
                     centers[k] = points[random_idx]
 
         # 3. Compute inertia (sum of squared distances to centroids)
-        dist_matrix = distance.cdist (points, centers, metric='euclidean')
+        dist_matrix = distance.cdist(points, centers, metric='euclidean')
         # Each point's distance to its assigned cluster center
-        assigned_distances = dist_matrix[np.arange (n_points), labels]
-        inertia = np.sum (assigned_distances ** 2)
+        assigned_distances = dist_matrix[np.arange(n_points), labels]
+        inertia = np.sum(assigned_distances ** 2)
 
         # 4. Keep track of the best run
         if inertia < best_inertia:
             best_inertia = inertia
-            best_centers = centers.copy ()
-            best_labels = labels.copy ()
+            best_centers = centers.copy()
+            best_labels = labels.copy()
 
     # Return the best solution found
 
@@ -325,25 +325,25 @@ def dbscan(points: np.ndarray,
     """
     ######################################################
     # Write your own code here
-    n_points = len (points)
-    labels = np.full (n_points, -2, dtype=int)  # -2 = unvisited
+    n_points = len(points)
+    labels = np.full(n_points, -2, dtype=int)  # -2 = unvisited
     cluster_id = 0
 
     # Optionally precompute distance matrix for speed on small datasets
     # dist_matrix = distance.cdist(points, points, 'euclidean')
 
-    for i in range (n_points):
+    for i in range(n_points):
         # If visited (either assigned to cluster or noise), skip
         if labels[i] != -2:
             continue
 
         # region query for point i
         # If no precomputed dist_matrix, compute on the fly:
-        dist_i = np.linalg.norm (points - points[i], axis=1)
-        neighbors = np.where (dist_i <= eps)[0]
+        dist_i = np.linalg.norm(points - points[i], axis=1)
+        neighbors = np.where(dist_i <= eps)[0]
 
         # Check core condition
-        if len (neighbors) < min_samples:
+        if len(neighbors) < min_samples:
             labels[i] = -1  # noise
         else:
             # New cluster
@@ -352,9 +352,9 @@ def dbscan(points: np.ndarray,
             labels[i] = cluster_id
 
             # We'll expand the cluster starting from neighbors
-            queue = list (neighbors)
+            queue = list(neighbors)
             idx_ptr = 0
-            while idx_ptr < len (queue):
+            while idx_ptr < len(queue):
                 neighbor_idx = queue[idx_ptr]
                 idx_ptr += 1
 
@@ -362,12 +362,12 @@ def dbscan(points: np.ndarray,
                 if labels[neighbor_idx] == -2:
                     labels[neighbor_idx] = cluster_id
                     # region query for neighbor_idx
-                    dist_neighbor = np.linalg.norm (points - points[neighbor_idx], axis=1)
-                    neighbors_of_neighbor = np.where (dist_neighbor <= eps)[0]
+                    dist_neighbor = np.linalg.norm(points - points[neighbor_idx], axis=1)
+                    neighbors_of_neighbor = np.where(dist_neighbor <= eps)[0]
 
                     # If neighbor is also a core point, add its neighbors to the queue
-                    if len (neighbors_of_neighbor) >= min_samples:
-                        queue.extend (neighbors_of_neighbor)
+                    if len(neighbors_of_neighbor) >= min_samples:
+                        queue.extend(neighbors_of_neighbor)
 
                 elif labels[neighbor_idx] == -1:
                     # Was noise, now becomes border
@@ -375,6 +375,4 @@ def dbscan(points: np.ndarray,
 
     # Replace leftover -2 (never visited) with -1 if any remain
     labels[labels == -2] = -1
-    return labels
-
     return labels
